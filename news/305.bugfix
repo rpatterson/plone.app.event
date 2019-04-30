@@ -1,0 +1,1 @@
+Fix missing attributes from old events portlets. Fixes a recursion error after upgrading.

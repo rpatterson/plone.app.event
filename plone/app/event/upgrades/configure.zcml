@@ -21,6 +21,16 @@
       />
 
   <genericsetup:upgradeStep
+      profile="plone.app.event:default"
+      source="13"
+      destination="14"
+      title="Cleanup Portlet Assignment Attributes"
+      description="Add or move missing attributes from old events portlet
+		   assignments."
+      handler=".upgrades.migrate_portal_events_portlets"
+      />
+
+  <genericsetup:upgradeStep
       source="14"
       destination="15"
       title="Remove object-action event_listing_settings"

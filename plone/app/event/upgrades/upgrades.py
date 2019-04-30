@@ -4,7 +4,9 @@ from plone.app.event.dx.interfaces import IDXEvent
 from plone.app.event.dx.behaviors import IEventAttendees
 from plone.app.event.dx.behaviors import IEventContact
 from plone.app.event.dx.behaviors import IEventLocation
+from plone.app.event.portlets import portlet_events
 from plone.dexterity.interfaces import IDexterityFTI
+from plone.portlets import constants
 from zope.annotation.interfaces import IAnnotatable
 from zope.annotation.interfaces import IAnnotations
 from zope.event import notify
@@ -85,3 +87,55 @@ def remove_event_listing_settings(context):
     if ob and getattr(ob, 'event_listing_settings', False):
         actions.object.manage_delObjects(['event_listing_settings', ])
         log.debug('Removed event_listing_settings from object actions.')
+
+
+def migrate_events_portlets(context, path=None):
+    """
+    Fix missing attributes from old events portlets.
+
+    Fixes a recursion error after upgrading:
+
+    2019-04-29 18:10:09 ERROR imageportlet Error while determining renderer availability of portlet ('context' '/...' 'events'): maximum recursion depth exceeded
+    Traceback (most recent call last):
+      File "eggs/plone.portlets-2.3-py2.7.egg/plone/portlets/manager.py", line 117, in _lazyLoadPortlets
+        isAvailable = renderer.available
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 141, in available
+        return self.data.count > 0 and len(self.events)
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 154, in events
+        if ICollection and ICollection.providedBy(self.search_base):
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 122, in search_base
+        if not self._search_base and self.data.search_base_uid:
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 106, in _uid
+        path = self.search_base
+    ...
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 122, in search_base
+        if not self._search_base and self.data.search_base_uid:
+      File "src/plone.app.event/plone/app/event/portlets/portlet_events.py", line 106, in _uid
+        path = self.search_base
+    RuntimeError: maximum recursion depth exceeded
+    """
+    annotations = IAnnotations(context, None)
+    if annotations is None:
+        return
+
+    default_assignment_attrs = vars(portlet_events.Assignment())
+    for mapping in annotations.get(
+            constants.CONTEXT_ASSIGNMENT_KEY, {}).values():
+        for assignment in mapping.values():
+            if not isinstance(assignment, portlet_events.Assignment):
+                continue
+
+            attrs = vars(assignment)
+            for attr, default in default_assignment_attrs.items():
+                if attr not in attrs:
+                    setattr(assignment, attr, default)
+
+
+def migrate_portal_events_portlets(context):
+    """
+    Apply the events portlets missing attributes fix to all assignments.
+    """
+    portal = getSite()
+    migrate_events_portlets(portal)
+    portal.ZopeFindAndApply(
+        portal, search_sub=1, apply_func=migrate_events_portlets)
